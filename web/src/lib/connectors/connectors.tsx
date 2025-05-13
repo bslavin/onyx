@@ -1199,6 +1199,37 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  freshdesk_kb: {
+    description: "Configure Freshdesk Knowledge Base connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the folder ID:",
+        label: "Folder ID",
+        name: "freshdesk_folder_id",
+        optional: false,
+        description: "The ID of the Knowledge Base folder to index."
+      }
+    ],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the portal URL (optional):",
+        label: "Portal URL",
+        name: "freshdesk_portal_url",
+        optional: true,
+        description: "The URL of your Freshdesk portal (e.g., https://support.your-company.com)"
+      },
+      {
+        type: "text",
+        query: "Enter the portal ID (optional):",
+        label: "Portal ID",
+        name: "freshdesk_portal_id",
+        optional: true,
+        description: "The ID of your Freshdesk portal, used for agent URLs"
+      }
+    ]
+  },
   fireflies: {
     description: "Configure Fireflies connector",
     values: [],
@@ -1595,6 +1626,11 @@ export interface AsanaConfig {
 }
 
 export interface FreshdeskConfig {}
+
+export interface FreshdeskKBConfig {
+  freshdesk_folder_id?: string;
+  freshdesk_domain?: string;
+}
 
 export interface FirefliesConfig {}
 

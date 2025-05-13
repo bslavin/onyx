@@ -1,0 +1,371 @@
+"""Freshdesk Knowledge Base connector implementation for Onyx."""
+
+import json
+import time
+import logging
+from collections.abc import Iterator
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
+
+import requests
+from bs4 import BeautifulSoup
+
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector, PollConnector, SecondsSinceUnixEpoch, SlimConnector, GenerateSlimDocumentOutput
+from onyx.connectors.models import ConnectorMissingCredentialError, Document, TextSection, SlimDocument
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+_FRESHDESK_KB_ID_PREFIX = "FRESHDESK_KB_"
+
+# Fields to extract from solution articles
+_SOLUTION_ARTICLE_FIELDS_TO_INCLUDE = {
+    "id",
+    "title",
+    "description", # HTML content
+    "description_text", # Plain text content
+    "folder_id",
+    "category_id",
+    "status", # 1: Draft, 2: Published
+    "tags",
+    "thumbs_up",
+    "thumbs_down",
+    "hits",
+    "created_at",
+    "updated_at",
+}
+
+
+def _clean_html_content(html_content: str) -> str:
+    """
+    Cleans HTML content, extracting plain text.
+    Uses BeautifulSoup to parse HTML and get text.
+    """
+    if not html_content:
+        return ""
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+        text_parts = [p.get_text(separator=" ", strip=True) for p in soup.find_all(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])]
+        if not text_parts:
+            return soup.get_text(separator=" ", strip=True)
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.error(f"Error cleaning HTML with BeautifulSoup: {e}")
+        return html_content
+
+
+def _create_metadata_from_article(article: dict, domain: str, portal_url: str, portal_id: str) -> dict:
+    """
+    Creates a metadata dictionary from a Freshdesk solution article.
+    """
+    metadata: dict[str, Any] = {}
+    article_id = article.get("id")
+
+    for key, value in article.items():
+        if key not in _SOLUTION_ARTICLE_FIELDS_TO_INCLUDE:
+            continue
+        if value is None or (isinstance(value, list) and not value):  # Skip None or empty lists
+            continue
+        metadata[key] = value
+    
+    # Construct URLs
+    if article_id:
+        # Agent URL (the one with portalId)
+        if portal_url and portal_id:
+            portal_base = portal_url.rstrip('/')
+            metadata["agent_url"] = f"{portal_base}/a/solutions/articles/{article_id}?portalId={portal_id}"
+        else:
+            logger.warning(f"Could not construct agent_url for article {article_id}: missing portal_url or portal_id.")
+
+        # Public/API Domain URL
+        if domain:
+            public_portal_base = f"https://{domain.rstrip('/')}"
+            metadata["public_url"] = f"{public_portal_base}/a/solutions/articles/{article_id}"
+        else:
+            logger.warning(f"Could not construct public_url for article {article_id}: missing domain.")
+            
+    # Convert status number to human-readable string
+    status_number = article.get("status")
+    if status_number == 1:
+        metadata["status_string"] = "Draft"
+    elif status_number == 2:
+        metadata["status_string"] = "Published"
+    else:
+        metadata["status_string"] = "Unknown"
+
+    return metadata
+
+
+def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal_id: str) -> Document:
+    """
+    Creates an Onyx Document from a Freshdesk solution article.
+    """
+    article_id = article.get("id")
+    title = article.get("title", "Untitled Article")
+    html_description = article.get("description", "")
+    
+    # Clean HTML content
+    text_content = _clean_html_content(html_description)
+
+    metadata = _create_metadata_from_article(article, domain, portal_url, portal_id)
+    
+    # Use agent_url as the primary link for the TextSection if available, else public_url
+    link = metadata.get("agent_url") or metadata.get("public_url") or f"https://{domain}/a/solutions/articles/{article_id}"
+
+    return Document(
+        id=_FRESHDESK_KB_ID_PREFIX + str(article_id) if article_id else _FRESHDESK_KB_ID_PREFIX + "UNKNOWN",
+        sections=[
+            TextSection(
+                link=link,
+                text=text_content,
+            )
+        ],
+        source=DocumentSource.FRESHDESK_KB,
+        semantic_identifier=title,
+        metadata=metadata,
+        doc_updated_at=datetime.fromisoformat(article["updated_at"].replace("Z", "+00:00")) if article.get("updated_at") else datetime.now(timezone.utc),
+    )
+
+
+class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnector):
+    """
+    Onyx Connector for fetching Freshdesk Knowledge Base (Solution Articles) from a specific folder.
+    Implements LoadConnector for full indexing and PollConnector for incremental updates.
+    """
+    def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
+        self.batch_size = batch_size
+        self.api_key: Optional[str] = None
+        self.domain: Optional[str] = None
+        self.password: Optional[str] = "X"  # Freshdesk uses API key as username, 'X' as password
+        self.folder_id: Optional[str] = None
+        self.portal_url: Optional[str] = None
+        self.portal_id: Optional[str] = None
+        self.headers = {"Content-Type": "application/json"}
+
+    def load_credentials(self, credentials: dict[str, str | int]) -> None:
+        """Loads Freshdesk API credentials and configuration."""
+        api_key = credentials.get("freshdesk_api_key")
+        domain = credentials.get("freshdesk_domain")
+        folder_id = credentials.get("freshdesk_folder_id")
+        portal_url = credentials.get("freshdesk_portal_url")  # For constructing agent URLs
+        portal_id = credentials.get("freshdesk_portal_id")    # For constructing agent URLs
+        
+        # Check credentials
+        if not all(isinstance(cred, str) for cred in [domain, api_key, folder_id] if cred is not None):
+            missing = [
+                name for name, val in {
+                    "domain": domain, "api_key": api_key, "folder_id": folder_id,
+                }.items() if not isinstance(val, str)
+            ]
+            raise ConnectorMissingCredentialError(
+                f"Required Freshdesk KB credentials must be strings. Missing/invalid: {missing}"
+            )
+
+        self.api_key = str(api_key)
+        self.domain = str(domain)
+        self.folder_id = str(folder_id)
+        # Handle optional parameters
+        self.portal_url = str(portal_url) if portal_url is not None else None
+        self.portal_id = str(portal_id) if portal_id is not None else None
+        self.base_url = f"https://{self.domain}/api/v2"
+        self.auth = (self.api_key, self.password)
+
+    def validate_connector_settings(self) -> None:
+        """
+        Validate connector settings by testing API connectivity.
+        """
+        if not self.api_key or not self.domain or not self.folder_id:
+            raise ConnectorMissingCredentialError(
+                "Missing required credentials for FreshdeskKnowledgeBaseConnector"
+            )
+        
+        try:
+            # Test API by trying to fetch one article from the folder
+            url = f"{self.base_url}/solutions/folders/{self.folder_id}/articles"
+            params = {"page": 1, "per_page": 1}
+            response = requests.get(url, auth=self.auth, headers=self.headers, params=params)
+            response.raise_for_status()
+            logger.info(f"Successfully validated Freshdesk KB connector for folder {self.folder_id}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to validate Freshdesk KB connector: {e}")
+            raise ConnectorMissingCredentialError(
+                f"Could not connect to Freshdesk API: {e}"
+            )
+
+    def _make_api_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
+        """Makes a GET request to the Freshdesk API with rate limit handling."""
+        if not self.auth:
+            raise ConnectorMissingCredentialError("Freshdesk KB credentials not loaded.")
+        
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = requests.get(url, auth=self.auth, headers=self.headers, params=params)
+                response.raise_for_status()
+
+                if response.status_code == 429:  # Too Many Requests
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    logger.warning(f"Rate limit exceeded. Retrying after {retry_after} seconds.")
+                    time.sleep(retry_after)
+                    continue
+                
+                return response.json()
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"HTTP error: {e} - {response.text if 'response' in locals() else 'No response'} for URL {url} with params {params}")
+                return None
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request failed: {e} for URL {url}")
+                if attempt < retries - 1:
+                    time.sleep(5 * (attempt + 1))
+                else:
+                    return None
+        return None
+
+    def _fetch_articles_from_folder(self, folder_id: str, updated_since: Optional[datetime] = None) -> Iterator[List[dict]]:
+        """
+        Fetches solution articles from a specific folder, handling pagination.
+        Filters by 'updated_since' if provided.
+        """
+        if not self.base_url or not folder_id:
+            raise ConnectorMissingCredentialError("Freshdesk KB connector not properly configured (base_url or folder_id missing).")
+
+        page = 1
+        while True:
+            url = f"{self.base_url}/solutions/folders/{folder_id}/articles"
+            params: dict[str, Any] = {"page": page, "per_page": 30}
+
+            logger.info(f"Fetching articles from Freshdesk KB folder {folder_id}, page {page}...")
+            article_batch = self._make_api_request(url, params)
+
+            if article_batch is None:  # Error occurred
+                logger.error(f"Failed to fetch articles for folder {folder_id}, page {page}.")
+                break
+            
+            if not isinstance(article_batch, list):
+                logger.error(f"Unexpected API response format for articles: {type(article_batch)}. Expected list.")
+                break
+
+            if not article_batch:  # No more articles
+                logger.info(f"No more articles found for folder {folder_id} on page {page}.")
+                break
+            
+            # If updated_since is provided, filter locally
+            if updated_since:
+                filtered_batch = []
+                for article in article_batch:
+                    if article.get("updated_at"):
+                        article_updated_at = datetime.fromisoformat(article["updated_at"].replace("Z", "+00:00"))
+                        if article_updated_at >= updated_since:
+                            filtered_batch.append(article)
+                
+                if filtered_batch:
+                    logger.info(f"Fetched {len(filtered_batch)} articles updated since {updated_since.isoformat()} from folder {folder_id}, page {page}.")
+                    yield filtered_batch
+            else:
+                logger.info(f"Fetched {len(article_batch)} articles from folder {folder_id}, page {page}.")
+                yield article_batch
+
+            if len(article_batch) < params["per_page"]:
+                logger.info(f"Last page reached for folder {folder_id}.")
+                break
+            
+            page += 1
+            time.sleep(1)  # Basic rate limiting
+
+    def _process_articles(self, folder_id_to_fetch: str, start_time: Optional[datetime] = None) -> GenerateDocumentsOutput:
+        """
+        Processes articles from a folder, converting them to Onyx Documents.
+        'start_time' is for filtering articles updated since that time.
+        """
+        if not self.domain:
+            raise ConnectorMissingCredentialError("Freshdesk KB domain not loaded.")
+
+        doc_batch: List[Document] = []
+        
+        # Use portal_url and portal_id if available, otherwise use None
+        portal_url = self.portal_url if self.portal_url else None
+        portal_id = self.portal_id if self.portal_id else None
+        
+        for article_list_from_api in self._fetch_articles_from_folder(folder_id_to_fetch, start_time):
+            for article_data in article_list_from_api:
+                try:
+                    doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
+                    doc_batch.append(doc)
+                except Exception as e:
+                    logger.error(f"Error creating document for article ID {article_data.get('id')}: {e}")
+                    continue
+
+                if len(doc_batch) >= self.batch_size:
+                    yield doc_batch
+                    doc_batch = []
+        
+        if doc_batch:  # Yield any remaining documents
+            yield doc_batch
+
+    def load_from_state(self) -> GenerateDocumentsOutput:
+        """Loads all solution articles from the configured folder."""
+        if not self.folder_id:
+            raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for load_from_state.")
+        logger.info(f"Loading all solution articles from Freshdesk KB folder: {self.folder_id}")
+        yield from self._process_articles(self.folder_id)
+
+    def poll_source(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> GenerateDocumentsOutput:
+        """
+        Polls for solution articles updated within the given time range.
+        """
+        if not self.folder_id:
+            raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for poll_source.")
+        
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        
+        logger.info(f"Polling Freshdesk KB folder {self.folder_id} for updates since {start_datetime.isoformat()}")
+        yield from self._process_articles(self.folder_id, start_datetime)
+
+    def _get_slim_documents_for_article_batch(self, articles: List[Dict[str, Any]]) -> List[SlimDocument]:
+        """Convert a batch of articles to SlimDocuments."""
+        slim_docs = []
+        for article in articles:
+            article_id = article.get("id")
+            if article_id:
+                # All we need is the ID - no permissions data needed for this connector
+                slim_docs.append(
+                    SlimDocument(
+                        id=_FRESHDESK_KB_ID_PREFIX + str(article_id),
+                        perm_sync_data=None,
+                    )
+                )
+        return slim_docs
+
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """
+        Retrieves all document IDs for pruning purposes.
+        """
+        if not self.folder_id:
+            raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for slim document retrieval.")
+        
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
+        
+        slim_batch: List[SlimDocument] = []
+        for article_batch in self._fetch_articles_from_folder(self.folder_id, start_datetime):
+            # Convert to slim documents
+            new_slim_docs = self._get_slim_documents_for_article_batch(article_batch)
+            slim_batch.extend(new_slim_docs)
+            
+            # Heartbeat callback if provided
+            if callback:
+                callback.heartbeat()
+            
+            if len(slim_batch) >= self.batch_size:
+                yield slim_batch
+                slim_batch = []
+        
+        if slim_batch:
+            yield slim_batch
