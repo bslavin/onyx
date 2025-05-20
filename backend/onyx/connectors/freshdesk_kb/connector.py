@@ -437,6 +437,8 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         doc_batch: List[Document] = []
         article_count = 0
         processed_count = 0
+        error_count = 0
+        success_count = 0
         
         # Debug info about the connector state
         logger.info(f"Processing articles with folder_id={folder_id_to_fetch}, domain={self.domain}")
@@ -456,20 +458,49 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                     # Log sample article to help debug
                     sample = article_list_from_api[0]
                     logger.info(f"Sample article: id={sample.get('id')}, title={sample.get('title')}")
-                    logger.info(f"Article keys: {list(sample.keys())}")
-                
+                    
                 for article_data in article_list_from_api:
                     try:
-                        doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
-                        doc_batch.append(doc)
-                        processed_count += 1
+                        # Always create a document, even if there's an error
+                        try:
+                            doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
+                            doc_batch.append(doc)
+                            success_count += 1
+                            processed_count += 1
+                            logger.info(f"Successfully created document for article ID {article_data.get('id')}")
+                        except Exception as e:
+                            # Create a fallback error document
+                            article_id = article_data.get('id', 'UNKNOWN')
+                            title = article_data.get('title', 'Error Document')
+                            logger.error(f"Error creating document for article ID {article_id}: {e}")
+                            logger.error(f"Article data: {article_data}")
+                            
+                            error_doc = Document(
+                                id=_FRESHDESK_KB_ID_PREFIX + str(article_id),
+                                sections=[TextSection(
+                                    link=f"https://{self.domain}/a/solutions/articles/{article_id}" if article_id != 'UNKNOWN' else "",
+                                    text=article_data.get('description_text', 'Error processing document content')
+                                )],
+                                source=DocumentSource.FRESHDESK_KB,
+                                semantic_identifier=f"Error Document: {title}",
+                                metadata={
+                                    "error": str(e),
+                                    "original_article_id": article_id,
+                                    "original_title": title,
+                                    "original_updated_at": article_data.get("updated_at")
+                                },
+                                doc_updated_at=datetime.now(timezone.utc),
+                            )
+                            
+                            doc_batch.append(error_doc)
+                            error_count += 1
+                            processed_count += 1
                     except Exception as e:
-                        logger.error(f"Error creating document for article ID {article_data.get('id')}: {e}")
-                        logger.error(f"Article data: {article_data}")
+                        logger.error(f"Critical error processing article: {e}")
                         continue
 
                     if len(doc_batch) >= self.batch_size:
-                        logger.info(f"Yielding batch of {len(doc_batch)} documents")
+                        logger.info(f"Yielding batch of {len(doc_batch)} documents ({success_count} success, {error_count} error docs)")
                         yield doc_batch
                         doc_batch = []
         except Exception as e:
@@ -478,10 +509,10 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             logger.error(traceback.format_exc())
         
         if doc_batch:  # Yield any remaining documents
-            logger.info(f"Yielding final batch of {len(doc_batch)} documents")
+            logger.info(f"Yielding final batch of {len(doc_batch)} documents ({success_count} success, {error_count} error docs)")
             yield doc_batch
         
-        logger.info(f"Article processing complete: {processed_count}/{article_count} articles processed successfully")
+        logger.info(f"Article processing complete: {processed_count}/{article_count} articles processed, {success_count} successful, {error_count} error documents")
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Loads all solution articles from the configured folder."""
