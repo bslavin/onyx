@@ -175,6 +175,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         self.domain = freshdesk_domain
         self.password = "X"  # Freshdesk uses API key as username, 'X' as password
         
+        # Store connector_specific_config for later use
+        self.connector_specific_config = connector_specific_config
+        
         # Get folder_id from constructor parameter or from connector_specific_config
         self.folder_id = freshdesk_folder_id
         if connector_specific_config:
@@ -183,6 +186,16 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         if not self.folder_id and connector_specific_config and "freshdesk_folder_id" in connector_specific_config:
             self.folder_id = connector_specific_config.get("freshdesk_folder_id")
             logger.info(f"Using folder_id from connector_specific_config: {self.folder_id}")
+        
+        # Check for multi-folder configuration
+        if connector_specific_config and "freshdesk_folder_ids" in connector_specific_config:
+            folder_ids_value = connector_specific_config.get("freshdesk_folder_ids")
+            if isinstance(folder_ids_value, list):
+                self.folder_ids = folder_ids_value
+                logger.info(f"Using folder_ids (list) from connector_specific_config: {self.folder_ids}")
+            elif isinstance(folder_ids_value, str):
+                self.folder_ids = folder_ids_value  # Store as string, will be parsed in load_from_state/poll_source
+                logger.info(f"Using folder_ids (string) from connector_specific_config: {self.folder_ids}")
         
         # Debug connector initialization params
         logger.info(f"Initializing Freshdesk KB connector with params:")
@@ -559,16 +572,28 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             # Single folder ID provided directly
             folder_ids.append(self.folder_id)
         
-        # Check if we have folder_ids in connector_specific_config
-        if hasattr(self, 'folder_ids') and isinstance(self.folder_ids, list):
-            # Multiple folder IDs provided as a list
-            folder_ids.extend(self.folder_ids)
+        # Check for folder_ids in connector_specific_config and class attributes
+        if hasattr(self, 'connector_specific_config') and self.connector_specific_config:
+            # Check for freshdesk_folder_ids in connector_specific_config
+            if 'freshdesk_folder_ids' in self.connector_specific_config:
+                folder_ids_value = self.connector_specific_config.get('freshdesk_folder_ids')
+                if isinstance(folder_ids_value, list):
+                    folder_ids.extend(folder_ids_value)
+                elif isinstance(folder_ids_value, str):
+                    folder_ids.extend([fid.strip() for fid in folder_ids_value.split(',') if fid.strip()])
+                logger.info(f"Using folder_ids from connector_specific_config['freshdesk_folder_ids']: {folder_ids}")
         
-        # If no folder_ids found so far, check if there's a string in connector_specific_config
-        # that we can parse as a comma-separated list
-        if not folder_ids and hasattr(self, 'folder_ids') and isinstance(self.folder_ids, str):
-            # Multiple folder IDs provided as a comma-separated string
-            folder_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
+        # Also check if folder_ids was set as a class attribute
+        if hasattr(self, 'folder_ids'):
+            if isinstance(self.folder_ids, list):
+                # Multiple folder IDs provided as a list
+                folder_ids.extend(self.folder_ids)
+                logger.info(f"Using folder_ids from self.folder_ids (list): {self.folder_ids}")
+            elif isinstance(self.folder_ids, str):
+                # Multiple folder IDs provided as a comma-separated string
+                parsed_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
+                folder_ids.extend(parsed_ids)
+                logger.info(f"Using folder_ids from self.folder_ids (string): parsed as {parsed_ids}")
             
         if not folder_ids:
             raise ConnectorMissingCredentialError("No Freshdesk KB folder_id(s) configured for load_from_state.")
@@ -590,7 +615,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """
         Polls for solution articles updated within the given time range.
         """
-        # Get folder_ids from connector config (same logic as load_from_state)
+        # Get folder_ids from connector config
         folder_ids = []
         
         # Check if we have a single folder_id or multiple folder_ids in the configuration
@@ -598,16 +623,28 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             # Single folder ID provided directly
             folder_ids.append(self.folder_id)
         
-        # Check if we have folder_ids in connector_specific_config
-        if hasattr(self, 'folder_ids') and isinstance(self.folder_ids, list):
-            # Multiple folder IDs provided as a list
-            folder_ids.extend(self.folder_ids)
+        # Check for folder_ids in connector_specific_config and class attributes
+        if hasattr(self, 'connector_specific_config') and self.connector_specific_config:
+            # Check for freshdesk_folder_ids in connector_specific_config
+            if 'freshdesk_folder_ids' in self.connector_specific_config:
+                folder_ids_value = self.connector_specific_config.get('freshdesk_folder_ids')
+                if isinstance(folder_ids_value, list):
+                    folder_ids.extend(folder_ids_value)
+                elif isinstance(folder_ids_value, str):
+                    folder_ids.extend([fid.strip() for fid in folder_ids_value.split(',') if fid.strip()])
+                logger.info(f"Poll: Using folder_ids from connector_specific_config['freshdesk_folder_ids']: {folder_ids}")
         
-        # If no folder_ids found so far, check if there's a string in connector_specific_config
-        # that we can parse as a comma-separated list
-        if not folder_ids and hasattr(self, 'folder_ids') and isinstance(self.folder_ids, str):
-            # Multiple folder IDs provided as a comma-separated string
-            folder_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
+        # Also check if folder_ids was set as a class attribute
+        if hasattr(self, 'folder_ids'):
+            if isinstance(self.folder_ids, list):
+                # Multiple folder IDs provided as a list
+                folder_ids.extend(self.folder_ids)
+                logger.info(f"Poll: Using folder_ids from self.folder_ids (list): {self.folder_ids}")
+            elif isinstance(self.folder_ids, str):
+                # Multiple folder IDs provided as a comma-separated string
+                parsed_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
+                folder_ids.extend(parsed_ids)
+                logger.info(f"Poll: Using folder_ids from self.folder_ids (string): parsed as {parsed_ids}")
             
         if not folder_ids:
             raise ConnectorMissingCredentialError("No Freshdesk KB folder_id(s) configured for poll_source.")
