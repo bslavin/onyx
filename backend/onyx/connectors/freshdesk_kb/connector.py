@@ -143,6 +143,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         freshdesk_portal_url: Optional[str] = None,
         freshdesk_portal_id: Optional[str] = None,
         batch_size: int = INDEX_BATCH_SIZE,
+        connector_specific_config: Optional[dict] = None,
         **kwargs
     ) -> None:
         """
@@ -155,14 +156,28 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             freshdesk_portal_url: Optional URL for agent portal links
             freshdesk_portal_id: Optional ID for agent portal links
             batch_size: Number of documents to process in each batch
+            connector_specific_config: Configuration specific to this connector
         """
         self.batch_size = batch_size
         self.api_key = freshdesk_api_key
         self.domain = freshdesk_domain
         self.password = "X"  # Freshdesk uses API key as username, 'X' as password
+        
+        # Get folder_id from constructor parameter or from connector_specific_config
         self.folder_id = freshdesk_folder_id
+        if not self.folder_id and connector_specific_config and "freshdesk_folder_id" in connector_specific_config:
+            self.folder_id = connector_specific_config.get("freshdesk_folder_id")
+            logger.info(f"Using folder_id from connector_specific_config: {self.folder_id}")
+        
+        # Optional portal params
         self.portal_url = freshdesk_portal_url
+        if not self.portal_url and connector_specific_config and "freshdesk_portal_url" in connector_specific_config:
+            self.portal_url = connector_specific_config.get("freshdesk_portal_url")
+            
         self.portal_id = freshdesk_portal_id
+        if not self.portal_id and connector_specific_config and "freshdesk_portal_id" in connector_specific_config:
+            self.portal_id = connector_specific_config.get("freshdesk_portal_id")
+        
         self.headers = {"Content-Type": "application/json"}
         self.base_url = f"https://{self.domain}/api/v2" if self.domain else None
         self.auth = (self.api_key, self.password) if self.api_key else None
@@ -197,9 +212,16 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """
         Validate connector settings by testing API connectivity.
         """
-        if not self.api_key or not self.domain or not self.folder_id:
+        if not self.api_key or not self.domain:
             raise ConnectorMissingCredentialError(
                 "Missing required credentials for FreshdeskKnowledgeBaseConnector"
+            )
+
+        # Get folder_id from connector config if not already set via constructor
+        if not self.folder_id:
+            logger.error("Missing folder_id in connector settings - this should come from connector_specific_config")
+            raise ConnectorMissingCredentialError(
+                "Missing folder_id in connector settings. Please configure the folder ID in connector settings."
             )
         
         try:
