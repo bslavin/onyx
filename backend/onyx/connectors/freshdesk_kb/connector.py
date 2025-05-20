@@ -103,31 +103,55 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
     """
     Creates an Onyx Document from a Freshdesk solution article.
     """
-    article_id = article.get("id")
-    title = article.get("title", "Untitled Article")
-    html_description = article.get("description", "")
-    
-    # Clean HTML content
-    text_content = _clean_html_content(html_description)
+    try:
+        article_id = article.get("id")
+        title = article.get("title", "Untitled Article")
+        html_description = article.get("description", "")
+        
+        logger.info(f"Creating document from article: id={article_id}, title={title}")
+        
+        # Clean HTML content
+        text_content = _clean_html_content(html_description)
+        
+        # Check if content was properly extracted
+        if not text_content:
+            logger.warning(f"No text content extracted from article {article_id}")
+            text_content = article.get("description_text", "No content available")
 
-    metadata = _create_metadata_from_article(article, domain, portal_url, portal_id)
-    
-    # Use agent_url as the primary link for the TextSection if available, else public_url
-    link = metadata.get("agent_url") or metadata.get("public_url") or f"https://{domain}/a/solutions/articles/{article_id}"
+        metadata = _create_metadata_from_article(article, domain, portal_url, portal_id)
+        
+        # Use agent_url as the primary link for the TextSection if available, else public_url
+        link = metadata.get("agent_url") or metadata.get("public_url") or f"https://{domain}/a/solutions/articles/{article_id}"
 
-    return Document(
-        id=_FRESHDESK_KB_ID_PREFIX + str(article_id) if article_id else _FRESHDESK_KB_ID_PREFIX + "UNKNOWN",
-        sections=[
-            TextSection(
-                link=link,
-                text=text_content,
-            )
-        ],
-        source=DocumentSource.FRESHDESK_KB,
-        semantic_identifier=title,
-        metadata=metadata,
-        doc_updated_at=datetime.fromisoformat(article["updated_at"].replace("Z", "+00:00")) if article.get("updated_at") else datetime.now(timezone.utc),
-    )
+        document = Document(
+            id=_FRESHDESK_KB_ID_PREFIX + str(article_id) if article_id else _FRESHDESK_KB_ID_PREFIX + "UNKNOWN",
+            sections=[
+                TextSection(
+                    link=link,
+                    text=text_content,
+                )
+            ],
+            source=DocumentSource.FRESHDESK_KB,
+            semantic_identifier=title,
+            metadata=metadata,
+            doc_updated_at=datetime.fromisoformat(article["updated_at"].replace("Z", "+00:00")) if article.get("updated_at") else datetime.now(timezone.utc),
+        )
+        
+        logger.info(f"Successfully created document for article {article_id}")
+        return document
+    except Exception as e:
+        logger.error(f"Error creating document from article {article.get('id')}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        # Return a minimal document rather than raising an exception to avoid stopping the entire indexing process
+        return Document(
+            id=_FRESHDESK_KB_ID_PREFIX + str(article.get("id", "ERROR")),
+            sections=[TextSection(link="", text="Error processing document")],
+            source=DocumentSource.FRESHDESK_KB,
+            semantic_identifier="Error Document",
+            metadata={"error": str(e), "original_article_id": article.get("id")},
+            doc_updated_at=datetime.now(timezone.utc),
+        )
 
 
 class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnector):
