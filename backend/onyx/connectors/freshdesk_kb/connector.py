@@ -165,9 +165,18 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         
         # Get folder_id from constructor parameter or from connector_specific_config
         self.folder_id = freshdesk_folder_id
+        if connector_specific_config:
+            logger.info(f"connector_specific_config keys: {list(connector_specific_config.keys())}")
+            
         if not self.folder_id and connector_specific_config and "freshdesk_folder_id" in connector_specific_config:
             self.folder_id = connector_specific_config.get("freshdesk_folder_id")
             logger.info(f"Using folder_id from connector_specific_config: {self.folder_id}")
+        
+        # Debug connector initialization params
+        logger.info(f"Initializing Freshdesk KB connector with params:")
+        logger.info(f"  - folder_id: {self.folder_id}")
+        logger.info(f"  - domain: {self.domain}")
+        logger.info(f"  - api_key: {'*****' + self.api_key[-4:] if self.api_key else None}")
         
         # Optional portal params
         self.portal_url = freshdesk_portal_url
