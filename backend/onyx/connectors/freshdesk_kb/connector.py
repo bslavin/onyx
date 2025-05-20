@@ -331,26 +331,53 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             raise ConnectorMissingCredentialError("Freshdesk KB domain not loaded.")
 
         doc_batch: List[Document] = []
+        article_count = 0
+        processed_count = 0
+        
+        # Debug info about the connector state
+        logger.info(f"Processing articles with folder_id={folder_id_to_fetch}, domain={self.domain}")
+        logger.info(f"Using auth credentials: api_key={'*****' + self.api_key[-4:] if self.api_key else 'None'}")
+        logger.info(f"Optional params: portal_url={self.portal_url}, portal_id={self.portal_id}")
         
         # Use portal_url and portal_id if available, otherwise use None
         portal_url = self.portal_url if self.portal_url else None
         portal_id = self.portal_id if self.portal_id else None
         
-        for article_list_from_api in self._fetch_articles_from_folder(folder_id_to_fetch, start_time):
-            for article_data in article_list_from_api:
-                try:
-                    doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
-                    doc_batch.append(doc)
-                except Exception as e:
-                    logger.error(f"Error creating document for article ID {article_data.get('id')}: {e}")
-                    continue
+        try:
+            for article_list_from_api in self._fetch_articles_from_folder(folder_id_to_fetch, start_time):
+                article_count += len(article_list_from_api)
+                logger.info(f"Received batch of {len(article_list_from_api)} articles from API")
+                
+                if len(article_list_from_api) > 0:
+                    # Log sample article to help debug
+                    sample = article_list_from_api[0]
+                    logger.info(f"Sample article: id={sample.get('id')}, title={sample.get('title')}")
+                    logger.info(f"Article keys: {list(sample.keys())}")
+                
+                for article_data in article_list_from_api:
+                    try:
+                        doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
+                        doc_batch.append(doc)
+                        processed_count += 1
+                    except Exception as e:
+                        logger.error(f"Error creating document for article ID {article_data.get('id')}: {e}")
+                        logger.error(f"Article data: {article_data}")
+                        continue
 
-                if len(doc_batch) >= self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+                    if len(doc_batch) >= self.batch_size:
+                        logger.info(f"Yielding batch of {len(doc_batch)} documents")
+                        yield doc_batch
+                        doc_batch = []
+        except Exception as e:
+            logger.error(f"Error in _process_articles: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
         
         if doc_batch:  # Yield any remaining documents
+            logger.info(f"Yielding final batch of {len(doc_batch)} documents")
             yield doc_batch
+        
+        logger.info(f"Article processing complete: {processed_count}/{article_count} articles processed successfully")
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Loads all solution articles from the configured folder."""
