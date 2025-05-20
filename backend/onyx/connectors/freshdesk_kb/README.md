@@ -1,65 +1,79 @@
-# Freshdesk Knowledge Base Connector for Onyx
+# Freshdesk Knowledge Base Connector
 
-This connector allows Onyx to index Freshdesk Knowledge Base articles from specific folders.
+This connector allows you to index content from Freshdesk Knowledge Base folders into Onyx.
 
 ## Features
 
-- Bulk indexing of all solution articles from a specified folder
-- Support for incremental updates through polling
-- Slim document retrieval for pruning old documents
-- HTML content cleaning to extract meaningful text from articles
-- Support for agent and public URLs in metadata
-
-## Prerequisites
-
-- Freshdesk account with admin access or API permissions
-- API key for your Freshdesk domain
-- Folder ID of the Freshdesk Knowledge Base folder you want to index
+- Index articles from one or multiple Freshdesk Knowledge Base folders
+- Automatically handles pagination and rate limits
+- Supports incremental indexing (polling)
+- Includes a utility script to list all available folders
 
 ## Setup
 
-### Obtaining the Required Credentials
+### 1. Prerequisites
 
-1. **Freshdesk API Key**: In your Freshdesk portal, go to Profile settings → API Key
-2. **Freshdesk Domain**: This is the subdomain of your Freshdesk account (e.g., `yourdomain` in `https://yourdomain.freshdesk.com`)
-3. **Folder ID**: 
-   - Navigate to the Solution folder you want to index in your Freshdesk portal
-   - The folder ID is in the URL (e.g., in `https://yourdomain.freshdesk.com/a/solutions/folders/12345678`, the folder ID is `12345678`)
-4. **Portal URL** (optional): The URL of your customer-facing portal (e.g., `https://support.yourdomain.com`)
-5. **Portal ID** (optional): Found in the Help Center settings or the portal URL
+You'll need the following credentials for the Freshdesk KB connector:
 
-### Configuring the Connector in Onyx
+- **Freshdesk Domain**: Your Freshdesk domain (e.g., `company.freshdesk.com`)
+- **API Key**: Your Freshdesk API key
+- **Folder ID(s)**: The ID(s) of the folder(s) you want to index
 
-1. Go to Admin → Connectors → Add Connector
-2. Select "Freshdesk Knowledge Base"
-3. Fill in the required credentials:
-   - Freshdesk Domain
-   - Freshdesk API Key
-   - Folder ID
-   - Portal URL (optional)
-   - Portal ID (optional)
-4. Configure access settings
-5. Save the connector
+### 2. Finding Available Folders
 
-## How it Works
+To list all available folders in your Freshdesk Knowledge Base, use the provided script:
 
-The connector retrieves articles from the specified Freshdesk Knowledge Base folder, processes the HTML content to extract text, and indexes them in Onyx. Article metadata is preserved, including links to the original articles.
+```bash
+python backend/scripts/list_freshdesk_kb_folders.py --domain your-domain.freshdesk.com --api-key your-api-key --pretty
+```
 
-### Authentication
+This will output a list of all folders with their IDs and save the full details to `folders.json`.
 
-The connector uses Basic Authentication with your API key as the username and "X" as the password, which is the standard authentication method for Freshdesk API.
+### 3. Configuration
 
-### Polling Mechanism
+When setting up the connector in the Onyx admin interface:
 
-For incremental updates, the connector uses a polling mechanism to retrieve articles that have been updated since the last poll.
+1. Use the credential with your Freshdesk domain and API key
+2. In the "Folder IDs" field, enter one or more folder IDs (comma-separated for multiple folders)
+3. Optionally, provide the Portal URL and Portal ID for better link generation
+
+## Advanced Options
+
+- **Single Folder ID**: For backward compatibility only. Use the main "Folder IDs" field instead.
+- **Portal URL**: The URL of your Freshdesk portal (e.g., `https://support.your-company.com`)
+- **Portal ID**: The ID of your Freshdesk portal, used for agent URLs
 
 ## Troubleshooting
 
-- Verify your API key has the necessary permissions
-- Check that the folder ID exists and contains articles
-- Ensure your credentials are entered correctly
-- Review the logs for any error messages
+If you encounter issues with the connector:
 
-## API References
+1. Check that your credentials (domain, API key) are correct
+2. Verify that the folder IDs exist and are accessible with your API key
+3. Look for error messages in the logs
+4. Try indexing a single folder at a time to isolate any issues
 
-- [Freshdesk Solutions API Documentation](https://developers.freshdesk.com/api/#solutions)
+## Implementation Details
+
+The connector uses the Freshdesk API v2 to fetch articles from solution folders:
+
+- Categories contain folders, which contain articles
+- The connector first lists all available folders when using the folder listing script
+- When indexing, it fetches articles directly from the specified folder IDs
+- Each article is converted to an Onyx Document with appropriate metadata
+
+## Performance Considerations
+
+- Use multiple folder IDs when you need to index content from different categories
+- The connector handles API rate limits automatically
+- For large knowledge bases, indexing may take some time due to API pagination
+
+## Changelog
+
+### v1.5
+- Added support for indexing multiple folders
+- Improved error handling and recovery
+- Added folder listing utility script
+- Enhanced document yielding to prevent lost documents
+
+### v1.0
+- Initial implementation with single folder support

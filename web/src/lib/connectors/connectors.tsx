@@ -1204,14 +1204,23 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [
       {
         type: "text",
-        query: "Enter the folder ID:",
-        label: "Folder ID",
-        name: "freshdesk_folder_id",
+        query: "Enter Freshdesk KB folder IDs:",
+        label: "Folder IDs",
+        name: "freshdesk_folder_ids",
         optional: false,
-        description: "The ID of the Knowledge Base folder to index."
+        description: "The IDs of Knowledge Base folders to index. For multiple folders, enter comma-separated values (e.g., 5000184231,5000184232)",
+        isTextArea: true
       }
     ],
     advanced_values: [
+      {
+        type: "text",
+        query: "Enter a single folder ID for backward compatibility (optional):",
+        label: "Single Folder ID (deprecated)",
+        name: "freshdesk_folder_id",
+        optional: true,
+        description: "For backward compatibility. Prefer using the Folder IDs field above for all configurations."
+      },
       {
         type: "text",
         query: "Enter the portal URL (optional):",

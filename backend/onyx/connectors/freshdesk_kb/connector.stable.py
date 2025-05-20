@@ -1,4 +1,4 @@
-"""Freshdesk Knowledge Base connector implementation for Onyx. (v1.5)"""
+"""Freshdesk Knowledge Base connector implementation for Onyx. (v1.5 - STABLE VERSION)"""
 
 import json
 import time
@@ -326,61 +326,6 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 else:
                     return None
         return None
-        
-    def list_available_folders(self) -> List[Dict[str, Any]]:
-        """
-        Lists all available Knowledge Base folders from Freshdesk.
-        Returns a list of folder details that can be used for configuration.
-        """
-        if not self.base_url:
-            raise ConnectorMissingCredentialError("Freshdesk KB connector not properly configured (base_url missing).")
-        
-        all_folders = []
-        
-        try:
-            # First fetch all solution categories
-            categories_url = f"{self.base_url}/solutions/categories"
-            categories = self._make_api_request(categories_url)
-            
-            if not categories or not isinstance(categories, list):
-                logger.error("Failed to fetch solution categories or unexpected response format")
-                return []
-            
-            # For each category, get its folders
-            logger.info(f"Found {len(categories)} solution categories")
-            for category in categories:
-                category_id = category.get("id")
-                category_name = category.get("name", "Unknown")
-                
-                if not category_id:
-                    continue
-                
-                # Fetch folders for this category
-                folders_url = f"{self.base_url}/solutions/categories/{category_id}/folders"
-                folders = self._make_api_request(folders_url)
-                
-                if not folders or not isinstance(folders, list):
-                    logger.warning(f"Failed to fetch folders for category {category_id} or empty response")
-                    continue
-                
-                logger.info(f"Found {len(folders)} folders in category '{category_name}'")
-                
-                # Add category context to each folder
-                for folder in folders:
-                    folder["category_name"] = category_name
-                    all_folders.append(folder)
-                
-                # Respect rate limits
-                time.sleep(1)
-            
-            logger.info(f"Total folders found: {len(all_folders)}")
-            return all_folders
-            
-        except Exception as e:
-            logger.error(f"Error listing available folders: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return []
 
     def _fetch_articles_from_folder(self, folder_id: str, updated_since: Optional[datetime] = None) -> Iterator[List[dict]]:
         """
@@ -433,26 +378,15 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             page += 1
             time.sleep(1)  # Basic rate limiting
 
-    def _process_articles(self, folder_ids: List[str], start_time: Optional[datetime] = None) -> GenerateDocumentsOutput:
+    def _process_articles(self, folder_id_to_fetch: str, start_time: Optional[datetime] = None) -> GenerateDocumentsOutput:
         """
-        Process articles from multiple folders, converting them to Onyx Documents.
-        Accepts a list of folder IDs to fetch from.
+        EMERGENCY SIMPLIFIED VERSION - This is a complete rewrite focused on making sure documents are yielded.
+        Just create a document for each article and yield it immediately.
         """
         if not self.domain:
             raise ConnectorMissingCredentialError("Freshdesk KB domain not loaded.")
             
-        logger.info("======= STARTING MULTI-FOLDER ARTICLE PROCESSING =======")
-        
-        # Handle case where a single folder ID string is passed
-        if isinstance(folder_ids, str):
-            folder_ids = [folder_ids]
-            
-        # Make sure we have at least one folder ID
-        if not folder_ids:
-            logger.error("No folder IDs provided for processing")
-            raise ValueError("No folder IDs provided for processing")
-            
-        logger.info(f"Processing articles from {len(folder_ids)} folders: {folder_ids}")
+        logger.info("======= STARTING ULTRA-SIMPLE ARTICLE PROCESSING =======")
         
         # Use portal_url and portal_id if available, otherwise use None
         portal_url = self.portal_url if self.portal_url else None
@@ -477,49 +411,41 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             yield [canary_doc]
             logger.info("====== CANARY DOCUMENT YIELDED ======")
             
-            # Process each folder one by one
-            for folder_id in folder_ids:
-                logger.info(f"Processing folder ID: {folder_id}")
-                folder_article_count = 0
+            # Process actual articles in batches
+            for article_list_from_api in self._fetch_articles_from_folder(folder_id_to_fetch, start_time):
+                if not article_list_from_api:
+                    logger.info("Received empty article batch - skipping")
+                    continue
                 
-                # Process articles in batches for this folder
-                for article_list_from_api in self._fetch_articles_from_folder(folder_id, start_time):
-                    if not article_list_from_api:
-                        logger.info(f"Received empty article batch from folder {folder_id} - skipping")
-                        continue
-                    
-                    logger.info(f"Processing batch of {len(article_list_from_api)} articles from folder {folder_id}")
-                    folder_article_count += len(article_list_from_api)
-                    article_count += len(article_list_from_api)
-                    
-                    # Process each batch of articles separately to avoid any cross-batch dependencies
-                    current_batch = []
-                    
-                    for article_data in article_list_from_api:
-                        try:
-                            article_id = str(article_data.get('id', 'UNKNOWN'))
-                            doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
-                            current_batch.append(doc)
-                            logger.info(f"Added article ID {article_id} to current batch")
-                        except Exception as e:
-                            logger.error(f"Failed to create document: {e}")
-                            # Don't even try to create an error document - just skip it
-                    
-                    # Yield this batch immediately
-                    if current_batch:
-                        logger.info(f"====== YIELDING BATCH OF {len(current_batch)} DOCUMENTS ======")
-                        yield current_batch
-                        logger.info(f"====== BATCH YIELDED SUCCESSFULLY ======")
+                logger.info(f"Processing batch of {len(article_list_from_api)} articles")
+                article_count += len(article_list_from_api)
                 
-                logger.info(f"Completed processing folder {folder_id} - {folder_article_count} articles indexed")
+                # Process each batch of articles separately to avoid any cross-batch dependencies
+                current_batch = []
+                
+                for article_data in article_list_from_api:
+                    try:
+                        article_id = str(article_data.get('id', 'UNKNOWN'))
+                        doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
+                        current_batch.append(doc)
+                        logger.info(f"Added article ID {article_id} to current batch")
+                    except Exception as e:
+                        logger.error(f"Failed to create document: {e}")
+                        # Don't even try to create an error document - just skip it
+                
+                # Yield this batch immediately
+                if current_batch:
+                    logger.info(f"====== YIELDING BATCH OF {len(current_batch)} DOCUMENTS ======")
+                    yield current_batch
+                    logger.info(f"====== BATCH YIELDED SUCCESSFULLY ======")
             
             # Create a final document to confirm we reached the end
             final_doc = Document(
                 id=_FRESHDESK_KB_ID_PREFIX + "FINAL_TEST_DOC",
-                sections=[TextSection(link="", text=f"This is the final document. Processed {article_count} articles from {len(folder_ids)} folders.")],
+                sections=[TextSection(link="", text=f"This is the final document. Processed {article_count} articles.")],
                 source=DocumentSource.FRESHDESK_KB,
                 semantic_identifier="FINAL TEST DOCUMENT",
-                metadata={"article_count": article_count, "folder_count": len(folder_ids)},
+                metadata={"article_count": article_count},
                 doc_updated_at=datetime.now(timezone.utc),
             )
             
@@ -528,7 +454,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             yield [final_doc]
             logger.info("====== FINAL DOCUMENT YIELDED ======")
             
-            logger.info(f"======= COMPLETED PROCESSING {article_count} ARTICLES FROM {len(folder_ids)} FOLDERS =======")
+            logger.info(f"======= COMPLETED PROCESSING {article_count} ARTICLES =======")
             
         except Exception as e:
             logger.error(f"Critical error in article processing: {e}")
@@ -550,28 +476,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             logger.info("====== ERROR DOCUMENT YIELDED ======")
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        """Loads all solution articles from the configured folders."""
-        # Get folder_ids from connector config
-        folder_ids = []
-        
-        # Check if we have a single folder_id or multiple folder_ids in the configuration
-        if hasattr(self, 'folder_id') and self.folder_id:
-            # Single folder ID provided directly
-            folder_ids.append(self.folder_id)
-        
-        # Check if we have folder_ids in connector_specific_config
-        if hasattr(self, 'folder_ids') and isinstance(self.folder_ids, list):
-            # Multiple folder IDs provided as a list
-            folder_ids.extend(self.folder_ids)
-        
-        # If no folder_ids found so far, check if there's a string in connector_specific_config
-        # that we can parse as a comma-separated list
-        if not folder_ids and hasattr(self, 'folder_ids') and isinstance(self.folder_ids, str):
-            # Multiple folder IDs provided as a comma-separated string
-            folder_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
-            
-        if not folder_ids:
-            raise ConnectorMissingCredentialError("No Freshdesk KB folder_id(s) configured for load_from_state.")
+        """Loads all solution articles from the configured folder."""
+        if not self.folder_id:
+            raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for load_from_state.")
             
         # Double check credentials before starting indexing
         if not self.domain or not self.api_key:
@@ -579,38 +486,19 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             logger.error(f"Base URL: {self.base_url}, Auth: {bool(self.auth)}")
             raise ConnectorMissingCredentialError("Missing required Freshdesk credentials for indexing")
             
-        logger.info(f"Loading all solution articles from {len(folder_ids)} Freshdesk KB folders: {folder_ids}")
-        logger.info(f"Using domain: {self.domain}")
+        logger.info(f"Loading all solution articles from Freshdesk KB folder: {self.folder_id}")
+        logger.info(f"Using domain: {self.domain} and folder_id: {self.folder_id}")
         
         # Explicitly log that we're starting to yield documents
-        logger.info(f"Starting to yield documents from Freshdesk KB folders")
-        yield from self._process_articles(folder_ids)
+        logger.info(f"Starting to yield documents from Freshdesk KB folder: {self.folder_id}")
+        yield from self._process_articles(self.folder_id)
 
     def poll_source(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> GenerateDocumentsOutput:
         """
         Polls for solution articles updated within the given time range.
         """
-        # Get folder_ids from connector config (same logic as load_from_state)
-        folder_ids = []
-        
-        # Check if we have a single folder_id or multiple folder_ids in the configuration
-        if hasattr(self, 'folder_id') and self.folder_id:
-            # Single folder ID provided directly
-            folder_ids.append(self.folder_id)
-        
-        # Check if we have folder_ids in connector_specific_config
-        if hasattr(self, 'folder_ids') and isinstance(self.folder_ids, list):
-            # Multiple folder IDs provided as a list
-            folder_ids.extend(self.folder_ids)
-        
-        # If no folder_ids found so far, check if there's a string in connector_specific_config
-        # that we can parse as a comma-separated list
-        if not folder_ids and hasattr(self, 'folder_ids') and isinstance(self.folder_ids, str):
-            # Multiple folder IDs provided as a comma-separated string
-            folder_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
-            
-        if not folder_ids:
-            raise ConnectorMissingCredentialError("No Freshdesk KB folder_id(s) configured for poll_source.")
+        if not self.folder_id:
+            raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for poll_source.")
             
         # Double check credentials before starting polling
         if not self.domain or not self.api_key:
@@ -620,9 +508,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         
-        logger.info(f"Polling {len(folder_ids)} Freshdesk KB folders for updates since {start_datetime.isoformat()}")
-        logger.info(f"Using domain: {self.domain}, folders: {folder_ids}")
-        yield from self._process_articles(folder_ids, start_datetime)
+        logger.info(f"Polling Freshdesk KB folder {self.folder_id} for updates since {start_datetime.isoformat()}")
+        logger.info(f"Using domain: {self.domain} and folder_id: {self.folder_id}")
+        yield from self._process_articles(self.folder_id, start_datetime)
 
     def _get_slim_documents_for_article_batch(self, articles: List[Dict[str, Any]]) -> List[SlimDocument]:
         """Convert a batch of articles to SlimDocuments."""
