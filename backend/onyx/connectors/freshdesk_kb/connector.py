@@ -242,8 +242,23 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         self.base_url = f"https://{self.domain}/api/v2"
         self.auth = (self.api_key, self.password)
         
+        # Check for folder IDs in the credentials (will be present for new configuration format)
+        if "freshdesk_folder_ids" in credentials:
+            folder_ids_value = credentials.get("freshdesk_folder_ids")
+            if folder_ids_value:
+                self.folder_ids = str(folder_ids_value)
+                logger.info(f"Found folder_ids in credentials: {self.folder_ids}")
+        
+        # Also check for single folder ID (backward compatibility)
+        if "freshdesk_folder_id" in credentials:
+            folder_id_value = credentials.get("freshdesk_folder_id")
+            if folder_id_value:
+                self.folder_id = str(folder_id_value)
+                logger.info(f"Found single folder_id in credentials: {self.folder_id}")
+        
         # Log that credentials were loaded
         logger.info(f"CREDENTIALS LOADED: domain={self.domain}, api_key={'*****' + self.api_key[-4:] if self.api_key else None}")
+        logger.info(f"FOLDER CONFIG: folder_id={self.folder_id if hasattr(self, 'folder_id') else 'None'}, folder_ids={self.folder_ids if hasattr(self, 'folder_ids') else 'None'}")
 
     def validate_connector_settings(self) -> None:
         """
@@ -262,12 +277,20 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 "Missing required Freshdesk API key in credentials"
             )
 
+        # Debug log of all settings
+        logger.info("Validating connector settings with the following configuration:")
+        if hasattr(self, "connector_specific_config") and self.connector_specific_config:
+            logger.info(f"connector_specific_config: {self.connector_specific_config}")
+        else:
+            logger.info("No connector_specific_config present")
+            
         # Collect all configured folder IDs for validation
         folder_ids = []
         
         # Check if we have a single folder_id
-        if self.folder_id:
+        if hasattr(self, 'folder_id') and self.folder_id:
             folder_ids.append(self.folder_id)
+            logger.info(f"Found folder_id: {self.folder_id}")
         
         # Check for folder_ids in class properties or connector_specific_config
         if hasattr(self, 'folder_ids'):
@@ -288,10 +311,26 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         
         # We need at least one folder ID for validation
         if not folder_ids:
-            logger.error("No folder IDs found in connector settings")
-            raise ConnectorMissingCredentialError(
-                "Missing folder ID(s) in connector settings. Please configure at least one folder ID."
-            )
+            # Emergency fallback: Check if freshdesk_folder_ids exists in connector_specific_config
+            if hasattr(self, 'connector_specific_config') and self.connector_specific_config:
+                if 'freshdesk_folder_ids' in self.connector_specific_config:
+                    folder_ids_value = self.connector_specific_config.get('freshdesk_folder_ids')
+                    logger.info(f"Using freshdesk_folder_ids directly from connector_specific_config: {folder_ids_value}")
+                    if isinstance(folder_ids_value, str) and folder_ids_value.strip():
+                        # Directly use the first ID from the string for validation
+                        folder_id = folder_ids_value.split(',')[0].strip()
+                        if folder_id:
+                            folder_ids.append(folder_id)
+                            # Also set as the folder_id attribute for backward compatibility
+                            self.folder_id = folder_id
+                            logger.info(f"Emergency fallback: Using first ID from freshdesk_folder_ids: {folder_id}")
+            
+            # Final check - if still no folder IDs, raise error
+            if not folder_ids:
+                logger.error("No folder IDs found in connector settings")
+                raise ConnectorMissingCredentialError(
+                    "Missing folder ID(s) in connector settings. Please configure at least one folder ID in the Freshdesk KB 'Folder IDs' field."
+                )
             
         # Use the first folder ID for validation
         validation_folder_id = folder_ids[0]
