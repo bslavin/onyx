@@ -135,15 +135,37 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
     Onyx Connector for fetching Freshdesk Knowledge Base (Solution Articles) from a specific folder.
     Implements LoadConnector for full indexing and PollConnector for incremental updates.
     """
-    def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
+    def __init__(
+        self, 
+        freshdesk_folder_id: Optional[str] = None,
+        freshdesk_domain: Optional[str] = None,
+        freshdesk_api_key: Optional[str] = None,
+        freshdesk_portal_url: Optional[str] = None,
+        freshdesk_portal_id: Optional[str] = None,
+        batch_size: int = INDEX_BATCH_SIZE,
+        **kwargs
+    ) -> None:
+        """
+        Initialize the Freshdesk Knowledge Base connector.
+        
+        Args:
+            freshdesk_folder_id: The ID of the folder to fetch articles from
+            freshdesk_domain: Freshdesk domain (e.g., "company.freshdesk.com")
+            freshdesk_api_key: API key for authentication
+            freshdesk_portal_url: Optional URL for agent portal links
+            freshdesk_portal_id: Optional ID for agent portal links
+            batch_size: Number of documents to process in each batch
+        """
         self.batch_size = batch_size
-        self.api_key: Optional[str] = None
-        self.domain: Optional[str] = None
-        self.password: Optional[str] = "X"  # Freshdesk uses API key as username, 'X' as password
-        self.folder_id: Optional[str] = None
-        self.portal_url: Optional[str] = None
-        self.portal_id: Optional[str] = None
+        self.api_key = freshdesk_api_key
+        self.domain = freshdesk_domain
+        self.password = "X"  # Freshdesk uses API key as username, 'X' as password
+        self.folder_id = freshdesk_folder_id
+        self.portal_url = freshdesk_portal_url
+        self.portal_id = freshdesk_portal_id
         self.headers = {"Content-Type": "application/json"}
+        self.base_url = f"https://{self.domain}/api/v2" if self.domain else None
+        self.auth = (self.api_key, self.password) if self.api_key else None
 
     def load_credentials(self, credentials: dict[str, str | int]) -> None:
         """Loads Freshdesk API credentials and configuration."""
@@ -199,6 +221,11 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """Makes a GET request to the Freshdesk API with rate limit handling."""
         if not self.auth:
             raise ConnectorMissingCredentialError("Freshdesk KB credentials not loaded.")
+        
+        # Verify the URL doesn't have duplicated domains (which could cause SSL errors)
+        if ".freshdesk.com.freshdesk.com" in url:
+            url = url.replace(".freshdesk.com.freshdesk.com", ".freshdesk.com")
+            logger.warning(f"Fixed malformed URL containing duplicate domain: {url}")
         
         retries = 3
         for attempt in range(retries):
