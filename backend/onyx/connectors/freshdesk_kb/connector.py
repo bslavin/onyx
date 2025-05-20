@@ -123,17 +123,41 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
         # Use agent_url as the primary link for the TextSection if available, else public_url
         link = metadata.get("agent_url") or metadata.get("public_url") or f"https://{domain}/a/solutions/articles/{article_id}"
 
-        # Safely parse the updated_at date with fallback
+        # Safely parse the updated_at date with multiple fallbacks
         doc_updated_at = datetime.now(timezone.utc)
         if article.get("updated_at"):
             try:
-                # Handle different date formats that might come from the API
-                updated_at = article["updated_at"]
-                if updated_at.endswith('Z'):
-                    updated_at = updated_at.replace("Z", "+00:00")
-                doc_updated_at = datetime.fromisoformat(updated_at)
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Could not parse date {article.get('updated_at')}: {e}")
+                # Multiple format handling for maximum compatibility
+                updated_at_str = article["updated_at"]
+                
+                # Try different approaches to parse the date
+                try:
+                    # Method 1: Standard ISO format with Z timezone
+                    if updated_at_str.endswith('Z'):
+                        doc_updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                    # Method 2: Standard ISO format
+                    else:
+                        doc_updated_at = datetime.fromisoformat(updated_at_str)
+                except (ValueError, TypeError):
+                    try:
+                        # Method 3: Try with dateutil parser which is more forgiving
+                        from dateutil import parser
+                        doc_updated_at = parser.parse(updated_at_str)
+                    except (ImportError, ValueError, TypeError):
+                        # Method 4: Manual parsing as last resort
+                        import re
+                        if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', updated_at_str):
+                            # Format: 2020-02-05T08:55:42Z (common ISO format)
+                            year, month, day = int(updated_at_str[0:4]), int(updated_at_str[5:7]), int(updated_at_str[8:10])
+                            hour, minute, second = int(updated_at_str[11:13]), int(updated_at_str[14:16]), int(updated_at_str[17:19])
+                            doc_updated_at = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+                        else:
+                            # If all else fails, use current time
+                            logger.warning(f"Could not parse date using any method: {updated_at_str}")
+                            doc_updated_at = datetime.now(timezone.utc)
+            except Exception as e:
+                logger.warning(f"Date parsing completely failed for {article.get('updated_at')}: {e}")
+                logger.warning(f"Using current time as fallback")
 
         document = Document(
             id=_FRESHDESK_KB_ID_PREFIX + str(article_id) if article_id else _FRESHDESK_KB_ID_PREFIX + "UNKNOWN",
