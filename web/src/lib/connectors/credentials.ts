@@ -347,7 +347,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     freshdesk_api_key: "",
     freshdesk_portal_url: "",
     freshdesk_portal_id: "",
-    _version: "v1.3"
+    _version: "v1.4"
   } as FreshdeskKBCredentialJson,
   fireflies: {
     fireflies_api_key: "",
@@ -384,7 +384,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
 
 export const credentialDisplayNames: Record<string, string> = {
   // Version indicator for Freshdesk KB connector
-  _freshdesk_kb_version: "Freshdesk Knowledge Base Connector v1.3",
+  _freshdesk_kb_version: "Freshdesk Knowledge Base Connector v1.4",
   // Github
   github_access_token: "GitHub Access Token",
 
