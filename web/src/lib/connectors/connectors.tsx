@@ -1216,8 +1216,8 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       {
         type: "text",
         query: "Enter a single folder ID for backward compatibility (optional):",
-        label: "Single Folder ID (deprecated)",
-        name: "freshdesk_folder_id",
+        label: "Single Folder ID",
+        name: "folder_id", // Changed to match connector property name
         optional: true,
         description: "For backward compatibility. Prefer using the Folder IDs field above for all configurations."
       },
