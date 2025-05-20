@@ -1,4 +1,4 @@
-"""Freshdesk Knowledge Base connector implementation for Onyx. (v1.4)"""
+"""Freshdesk Knowledge Base connector implementation for Onyx. (v1.5)"""
 
 import json
 import time

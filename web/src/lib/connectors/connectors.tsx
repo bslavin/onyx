@@ -1200,7 +1200,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   freshdesk_kb: {
-    description: "Configure Freshdesk Knowledge Base connector (v1.4)",
+    description: "Configure Freshdesk Knowledge Base connector (v1.5)",
     values: [
       {
         type: "text",
