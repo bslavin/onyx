@@ -262,23 +262,52 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 "Missing required Freshdesk API key in credentials"
             )
 
-        # Get folder_id from connector config if not already set via constructor
-        if not self.folder_id:
-            logger.error("Missing folder_id in connector settings - this should come from connector_specific_config")
-            raise ConnectorMissingCredentialError(
-                "Missing folder_id in connector settings. Please configure the folder ID in connector settings."
-            )
+        # Collect all configured folder IDs for validation
+        folder_ids = []
         
-        # Log validation attempt with all parameters for debugging
+        # Check if we have a single folder_id
+        if self.folder_id:
+            folder_ids.append(self.folder_id)
+        
+        # Check for folder_ids in class properties or connector_specific_config
+        if hasattr(self, 'folder_ids'):
+            if isinstance(self.folder_ids, list):
+                folder_ids.extend(self.folder_ids)
+            elif isinstance(self.folder_ids, str):
+                parsed_ids = [fid.strip() for fid in self.folder_ids.split(',') if fid.strip()]
+                folder_ids.extend(parsed_ids)
+        
+        # Also check connector_specific_config directly
+        if self.connector_specific_config and "freshdesk_folder_ids" in self.connector_specific_config:
+            folder_ids_value = self.connector_specific_config.get("freshdesk_folder_ids")
+            if isinstance(folder_ids_value, list):
+                folder_ids.extend(folder_ids_value)
+            elif isinstance(folder_ids_value, str):
+                parsed_ids = [fid.strip() for fid in folder_ids_value.split(',') if fid.strip()]
+                folder_ids.extend(parsed_ids)
+        
+        # We need at least one folder ID for validation
+        if not folder_ids:
+            logger.error("No folder IDs found in connector settings")
+            raise ConnectorMissingCredentialError(
+                "Missing folder ID(s) in connector settings. Please configure at least one folder ID."
+            )
+            
+        # Use the first folder ID for validation
+        validation_folder_id = folder_ids[0]
+        logger.info(f"Using folder ID {validation_folder_id} for validation (out of {len(folder_ids)} configured folders)")
+        
+        # Log validation attempt with parameters for debugging
         logger.info(f"Validating Freshdesk KB connector with:")
         logger.info(f"  domain: {self.domain}")
-        logger.info(f"  folder_id: {self.folder_id}")
+        logger.info(f"  validation folder_id: {validation_folder_id}")
+        logger.info(f"  total configured folders: {len(folder_ids)}")
         logger.info(f"  api_key present: {'Yes' if self.api_key else 'No'}")
         logger.info(f"  base_url: {self.base_url}")
         
         try:
-            # Test API by trying to fetch one article from the folder
-            url = f"{self.base_url}/solutions/folders/{self.folder_id}/articles"
+            # Test API by trying to fetch one article from the validation folder
+            url = f"{self.base_url}/solutions/folders/{validation_folder_id}/articles"
             params = {"page": 1, "per_page": 1}
             
             logger.info(f"Making validation request to: {url}")
@@ -296,7 +325,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                     logger.warning(f"Unexpected response format: {type(data)}")
             
             response.raise_for_status()
-            logger.info(f"Successfully validated Freshdesk KB connector for folder {self.folder_id}")
+            logger.info(f"Successfully validated Freshdesk KB connector for folder {validation_folder_id}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to validate Freshdesk KB connector: {e}")
             logger.error(f"Response: {response.text if 'response' in locals() else 'No response'}")
@@ -685,24 +714,58 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """
         Retrieves all document IDs for pruning purposes.
         """
-        if not self.folder_id:
-            raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for slim document retrieval.")
+        # Get folder_ids using same logic as load_from_state and poll_source
+        folder_ids = []
+        
+        # Check if we have a single folder_id or multiple folder_ids in the configuration
+        if hasattr(self, 'folder_id') and self.folder_id:
+            # Single folder ID provided directly
+            folder_ids.append(self.folder_id)
+        
+        # Check for folder_ids in connector_specific_config and class attributes
+        if hasattr(self, 'connector_specific_config') and self.connector_specific_config:
+            # Check for freshdesk_folder_ids in connector_specific_config
+            if 'freshdesk_folder_ids' in self.connector_specific_config:
+                folder_ids_value = self.connector_specific_config.get('freshdesk_folder_ids')
+                if isinstance(folder_ids_value, list):
+                    folder_ids.extend(folder_ids_value)
+                elif isinstance(folder_ids_value, str):
+                    folder_ids.extend([fid.strip() for fid in folder_ids_value.split(',') if fid.strip()])
+        
+        # Also check if folder_ids was set as a class attribute
+        if hasattr(self, 'folder_ids'):
+            if isinstance(self.folder_ids, list):
+                folder_ids.extend(self.folder_ids)
+            elif isinstance(self.folder_ids, str):
+                parsed_ids = [folder_id.strip() for folder_id in self.folder_ids.split(',') if folder_id.strip()]
+                folder_ids.extend(parsed_ids)
+            
+        if not folder_ids:
+            raise ConnectorMissingCredentialError("No Freshdesk KB folder_id(s) configured for slim document retrieval.")
         
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         
-        slim_batch: List[SlimDocument] = []
-        for article_batch in self._fetch_articles_from_folder(self.folder_id, start_datetime):
-            # Convert to slim documents
-            new_slim_docs = self._get_slim_documents_for_article_batch(article_batch)
-            slim_batch.extend(new_slim_docs)
+        # Process each folder
+        for folder_id in folder_ids:
+            logger.info(f"Retrieving slim documents from folder {folder_id}")
             
-            # Heartbeat callback if provided
-            if callback:
-                callback.heartbeat()
+            slim_batch: List[SlimDocument] = []
+            for article_batch in self._fetch_articles_from_folder(folder_id, start_datetime):
+                # Convert to slim documents
+                new_slim_docs = self._get_slim_documents_for_article_batch(article_batch)
+                slim_batch.extend(new_slim_docs)
+                
+                # Heartbeat callback if provided
+                if callback:
+                    callback.heartbeat()
+                
+                if len(slim_batch) >= self.batch_size:
+                    logger.info(f"Yielding batch of {len(slim_batch)} slim documents from folder {folder_id}")
+                    yield slim_batch
+                    slim_batch = []
             
-            if len(slim_batch) >= self.batch_size:
+            if slim_batch:
+                logger.info(f"Yielding final batch of {len(slim_batch)} slim documents from folder {folder_id}")
                 yield slim_batch
-                slim_batch = []
         
-        if slim_batch:
-            yield slim_batch
+        logger.info(f"Completed retrieval of slim documents from {len(folder_ids)} folders")
