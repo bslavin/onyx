@@ -221,9 +221,17 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """
         Validate connector settings by testing API connectivity.
         """
-        if not self.api_key or not self.domain:
+        # Critical validation - check for domain and API key
+        if not self.domain:
+            logger.error("CRITICAL ERROR: Missing Freshdesk domain - check credentials!")
             raise ConnectorMissingCredentialError(
-                "Missing required credentials for FreshdeskKnowledgeBaseConnector"
+                "Missing required Freshdesk domain in credentials"
+            )
+            
+        if not self.api_key:
+            logger.error("CRITICAL ERROR: Missing Freshdesk API key - check credentials!")
+            raise ConnectorMissingCredentialError(
+                "Missing required Freshdesk API key in credentials"
             )
 
         # Get folder_id from connector config if not already set via constructor
@@ -233,15 +241,39 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 "Missing folder_id in connector settings. Please configure the folder ID in connector settings."
             )
         
+        # Log validation attempt with all parameters for debugging
+        logger.info(f"Validating Freshdesk KB connector with:")
+        logger.info(f"  domain: {self.domain}")
+        logger.info(f"  folder_id: {self.folder_id}")
+        logger.info(f"  api_key present: {'Yes' if self.api_key else 'No'}")
+        logger.info(f"  base_url: {self.base_url}")
+        
         try:
             # Test API by trying to fetch one article from the folder
             url = f"{self.base_url}/solutions/folders/{self.folder_id}/articles"
             params = {"page": 1, "per_page": 1}
+            
+            logger.info(f"Making validation request to: {url}")
             response = requests.get(url, auth=self.auth, headers=self.headers, params=params)
+            
+            # Log the response for debugging
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    logger.info(f"Validation successful - got {len(data)} articles in response")
+                    if len(data) > 0:
+                        # Log details of first article
+                        logger.info(f"First article: id={data[0].get('id')}, title={data[0].get('title')}")
+                else:
+                    logger.warning(f"Unexpected response format: {type(data)}")
+            
             response.raise_for_status()
             logger.info(f"Successfully validated Freshdesk KB connector for folder {self.folder_id}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to validate Freshdesk KB connector: {e}")
+            logger.error(f"Response: {response.text if 'response' in locals() else 'No response'}")
+            if 'response' in locals():
+                logger.error(f"Status code: {response.status_code}")
             raise ConnectorMissingCredentialError(
                 f"Could not connect to Freshdesk API: {e}"
             )
