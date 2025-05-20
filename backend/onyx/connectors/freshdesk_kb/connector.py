@@ -171,15 +171,14 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """Loads Freshdesk API credentials and configuration."""
         api_key = credentials.get("freshdesk_api_key")
         domain = credentials.get("freshdesk_domain")
-        folder_id = credentials.get("freshdesk_folder_id")
         portal_url = credentials.get("freshdesk_portal_url")  # For constructing agent URLs
         portal_id = credentials.get("freshdesk_portal_id")    # For constructing agent URLs
         
         # Check credentials
-        if not all(isinstance(cred, str) for cred in [domain, api_key, folder_id] if cred is not None):
+        if not all(isinstance(cred, str) for cred in [domain, api_key] if cred is not None):
             missing = [
                 name for name, val in {
-                    "domain": domain, "api_key": api_key, "folder_id": folder_id,
+                    "domain": domain, "api_key": api_key,
                 }.items() if not isinstance(val, str)
             ]
             raise ConnectorMissingCredentialError(
@@ -188,7 +187,6 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
 
         self.api_key = str(api_key)
         self.domain = str(domain)
-        self.folder_id = str(folder_id)
         # Handle optional parameters
         self.portal_url = str(portal_url) if portal_url is not None else None
         self.portal_id = str(portal_id) if portal_id is not None else None
