@@ -499,20 +499,31 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                         logger.error(f"Critical error processing article: {e}")
                         continue
 
+                    # Yield the batch immediately when it reaches batch size
                     if len(doc_batch) >= self.batch_size:
-                        logger.info(f"Yielding batch of {len(doc_batch)} documents ({success_count} success, {error_count} error docs)")
-                        yield doc_batch
-                        doc_batch = []
+                        logger.info(f"Yielding batch of {len(doc_batch)} documents ({success_count} success, {error_count} error docs) - FORCE YIELD")
+                        documents_to_yield = list(doc_batch)  # Create a copy to ensure clean yielding
+                        yield documents_to_yield
+                        doc_batch = []  # Clear the batch after yielding
         except Exception as e:
             logger.error(f"Error in _process_articles: {e}")
             import traceback
             logger.error(traceback.format_exc())
         
-        if doc_batch:  # Yield any remaining documents
-            logger.info(f"Yielding final batch of {len(doc_batch)} documents ({success_count} success, {error_count} error docs)")
-            yield doc_batch
+        # Always yield any remaining documents at the end
+        if doc_batch:
+            logger.info(f"Yielding final batch of {len(doc_batch)} documents ({success_count} success, {error_count} error docs) - FINAL YIELD")
+            # Create a copy to ensure clean yielding
+            documents_to_yield = list(doc_batch)
+            yield documents_to_yield
+            logger.info(f"Final batch yielded successfully")
+        else:
+            logger.info(f"No documents remaining in final batch")
         
-        logger.info(f"Article processing complete: {processed_count}/{article_count} articles processed, {success_count} successful, {error_count} error documents")
+        # Explicit summary of processing results
+        logger.info(f"INDEXING SUMMARY: {processed_count}/{article_count} articles processed")
+        logger.info(f"INDEXING SUMMARY: {success_count} successful documents, {error_count} error documents")
+        logger.info(f"INDEXING SUMMARY: Total documents yielded: {success_count + error_count}")
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Loads all solution articles from the configured folder."""
