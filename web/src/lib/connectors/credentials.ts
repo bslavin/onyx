@@ -214,7 +214,6 @@ export interface FreshdeskCredentialJson {
 export interface FreshdeskKBCredentialJson {
   freshdesk_domain: string;
   freshdesk_api_key: string;
-  freshdesk_folder_id: string;
   freshdesk_portal_url: string;
   freshdesk_portal_id: string;
 }
@@ -345,7 +344,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   freshdesk_kb: {
     freshdesk_domain: "",
     freshdesk_api_key: "",
-    freshdesk_folder_id: "",
     freshdesk_portal_url: "",
     freshdesk_portal_id: "",
   } as FreshdeskKBCredentialJson,
