@@ -1,4 +1,4 @@
-"""Freshdesk Knowledge Base connector implementation for Onyx. (v1.3)"""
+"""Freshdesk Knowledge Base connector implementation for Onyx. (v1.4)"""
 
 import json
 import time
@@ -216,6 +216,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         self.portal_id = str(portal_id) if portal_id is not None else None
         self.base_url = f"https://{self.domain}/api/v2"
         self.auth = (self.api_key, self.password)
+        
+        # Log that credentials were loaded
+        logger.info(f"CREDENTIALS LOADED: domain={self.domain}, api_key={'*****' + self.api_key[-4:] if self.api_key else None}")
 
     def validate_connector_settings(self) -> None:
         """
@@ -424,7 +427,18 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """Loads all solution articles from the configured folder."""
         if not self.folder_id:
             raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for load_from_state.")
+            
+        # Double check credentials before starting indexing
+        if not self.domain or not self.api_key:
+            logger.error(f"CRITICAL ERROR: Missing credentials in load_from_state! domain={self.domain}, api_key_present={'Yes' if self.api_key else 'No'}")
+            logger.error(f"Base URL: {self.base_url}, Auth: {bool(self.auth)}")
+            raise ConnectorMissingCredentialError("Missing required Freshdesk credentials for indexing")
+            
         logger.info(f"Loading all solution articles from Freshdesk KB folder: {self.folder_id}")
+        logger.info(f"Using domain: {self.domain} and folder_id: {self.folder_id}")
+        
+        # Explicitly log that we're starting to yield documents
+        logger.info(f"Starting to yield documents from Freshdesk KB folder: {self.folder_id}")
         yield from self._process_articles(self.folder_id)
 
     def poll_source(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> GenerateDocumentsOutput:
@@ -433,10 +447,17 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """
         if not self.folder_id:
             raise ConnectorMissingCredentialError("Freshdesk KB folder_id not configured for poll_source.")
+            
+        # Double check credentials before starting polling
+        if not self.domain or not self.api_key:
+            logger.error(f"CRITICAL ERROR: Missing credentials in poll_source! domain={self.domain}, api_key_present={'Yes' if self.api_key else 'No'}")
+            logger.error(f"Base URL: {self.base_url}, Auth: {bool(self.auth)}")
+            raise ConnectorMissingCredentialError("Missing required Freshdesk credentials for polling")
         
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         
         logger.info(f"Polling Freshdesk KB folder {self.folder_id} for updates since {start_datetime.isoformat()}")
+        logger.info(f"Using domain: {self.domain} and folder_id: {self.folder_id}")
         yield from self._process_articles(self.folder_id, start_datetime)
 
     def _get_slim_documents_for_article_batch(self, articles: List[Dict[str, Any]]) -> List[SlimDocument]:
