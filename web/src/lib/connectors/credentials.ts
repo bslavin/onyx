@@ -216,6 +216,7 @@ export interface FreshdeskKBCredentialJson {
   freshdesk_api_key: string;
   freshdesk_portal_url: string;
   freshdesk_portal_id: string;
+  _version?: string; // Version indicator that will appear in the UI
 }
 
 export interface FirefliesCredentialJson {
@@ -346,6 +347,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     freshdesk_api_key: "",
     freshdesk_portal_url: "",
     freshdesk_portal_id: "",
+    _version: "v1.3"
   } as FreshdeskKBCredentialJson,
   fireflies: {
     fireflies_api_key: "",
@@ -381,6 +383,8 @@ export const credentialTemplates: Record<ValidSources, any> = {
 };
 
 export const credentialDisplayNames: Record<string, string> = {
+  // Version indicator for Freshdesk KB connector
+  _freshdesk_kb_version: "Freshdesk Knowledge Base Connector v1.3",
   // Github
   github_access_token: "GitHub Access Token",
 
