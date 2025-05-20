@@ -123,6 +123,18 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
         # Use agent_url as the primary link for the TextSection if available, else public_url
         link = metadata.get("agent_url") or metadata.get("public_url") or f"https://{domain}/a/solutions/articles/{article_id}"
 
+        # Safely parse the updated_at date with fallback
+        doc_updated_at = datetime.now(timezone.utc)
+        if article.get("updated_at"):
+            try:
+                # Handle different date formats that might come from the API
+                updated_at = article["updated_at"]
+                if updated_at.endswith('Z'):
+                    updated_at = updated_at.replace("Z", "+00:00")
+                doc_updated_at = datetime.fromisoformat(updated_at)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse date {article.get('updated_at')}: {e}")
+
         document = Document(
             id=_FRESHDESK_KB_ID_PREFIX + str(article_id) if article_id else _FRESHDESK_KB_ID_PREFIX + "UNKNOWN",
             sections=[
@@ -134,7 +146,7 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
             source=DocumentSource.FRESHDESK_KB,
             semantic_identifier=title,
             metadata=metadata,
-            doc_updated_at=datetime.fromisoformat(article["updated_at"].replace("Z", "+00:00")) if article.get("updated_at") else datetime.now(timezone.utc),
+            doc_updated_at=doc_updated_at,
         )
         
         logger.info(f"Successfully created document for article {article_id}")
