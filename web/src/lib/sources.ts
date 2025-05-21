@@ -67,6 +67,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/web",
   },
+  youtrack: {
+    icon: GlobeIcon, // Temporary icon, should be replaced with YouTrackIcon
+    displayName: "YouTrack",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/youtrack",
+  },
   file: {
     icon: FileIcon2,
     displayName: "File",

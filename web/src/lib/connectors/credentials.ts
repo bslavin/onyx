@@ -241,6 +241,11 @@ export interface HighspotCredentialJson {
   highspot_secret: string;
 }
 
+export interface YouTrackCredentialJson {
+  youtrack_url: string;
+  youtrack_token: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -380,6 +385,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     highspot_key: "",
     highspot_secret: "",
   } as HighspotCredentialJson,
+  youtrack: {
+    youtrack_url: "",
+    youtrack_token: "",
+  } as YouTrackCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -525,6 +534,10 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  // YouTrack
+  youtrack_url: "YouTrack URL",
+  youtrack_token: "YouTrack API Token",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

@@ -136,6 +136,37 @@ export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
 > = {
+  youtrack: {
+    description: "Configure YouTrack connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the project IDs:",
+        label: "Project IDs",
+        name: "youtrack_project_ids",
+        optional: false,
+        description: "Comma-separated list of YouTrack project IDs to index (e.g., PROJECT-1,PROJECT-2)",
+      },
+      {
+        type: "text",
+        query: "Enter a custom query (optional):",
+        label: "Custom Query",
+        name: "custom_query",
+        optional: true,
+        description: "Optional YouTrack query to filter which issues are indexed (e.g., #Unresolved)"
+      },
+      {
+        type: "checkbox",
+        query: "Include comments?",
+        label: "Include Comments",
+        name: "include_comments",
+        description: "Whether to include issue comments in the indexed content",
+        optional: true,
+        default: true
+      }
+    ],
+    advanced_values: [],
+  },
   web: {
     description: "Configure Web connector",
     values: [
@@ -1644,6 +1675,12 @@ export interface FreshdeskKBConfig {
 }
 
 export interface FirefliesConfig {}
+
+export interface YouTrackConfig {
+  youtrack_project_ids: string;
+  custom_query?: string;
+  include_comments?: boolean;
+}
 
 export interface MediaWikiConfig extends MediaWikiBaseConfig {
   hostname: string;
