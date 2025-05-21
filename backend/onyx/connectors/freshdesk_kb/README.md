@@ -55,24 +55,21 @@ The `list_category_folders.py` script is particularly useful as it shows:
 - Creation date
 - URL to access the folder
 
-It also saves a detailed JSON file (`category_5000116325_folders.json`) that you can use for future reference.
+It also saves a detailed JSON file with folder information that you can use for future reference.
 
-#### Common Folders (Category ID: 5000116325)
+#### Multiple Folder Configuration
 
-Here are some useful folders from the "Internal" category that you might want to index:
+After listing available folders in your Freshdesk Knowledge Base, you can specify multiple folders to index.
 
-| Folder ID    | Name               | Article Count |
-|--------------|--------------------|--------------:|
-| 5000201824   | Internal General   | 153           |
-| 5000258916   | Old Archived       | 110           |
-| 5000278970   | WHMCS              | 51            |
-| 5000256156   | Halon              | 49            |
-| 5000184231   | Inbound Solutions  | 40            |
-| 5000255116   | CallTek            | 39            |
-| 5000247987   | Tickets and Tools  | 39            |
-| 5000184232   | Outbound Solutions | 20            |
+For example, if you have folders for different topics, you might want to index several of them together:
 
-You can index multiple folders by combining their IDs with commas, such as: `5000184231,5000184232`
+| Folder ID    | Example Name       |
+|--------------|-------------------|
+| 12345        | Product Documentation |
+| 67890        | FAQ                   |
+| 54321        | Setup Guide           |
+
+You can index multiple folders by combining their IDs with commas, such as: `12345,67890,54321`
 
 ### 3. Configuration
 
