@@ -132,7 +132,7 @@ def _create_doc_from_issue(issue: dict, base_url: str) -> Document:
                     text=text_content,
                 )
             ],
-            source=DocumentSource.YOUTRACK,  # This needs to be added to DocumentSource
+            source=DocumentSource.YOUTRACK,
             semantic_identifier=f"{readable_id}: {summary}",
             metadata=_create_metadata_from_issue(issue, base_url),
             doc_created_at=doc_created_at,
@@ -709,7 +709,24 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
         
         # Explicitly log that we're starting to yield documents
         logger.info(f"Starting to yield documents from YouTrack projects")
-        yield from self._process_issues(project_ids)
+        
+        # Add deep debugging to trace all steps
+        logger.info("CRITICAL DEBUG: About to call _process_issues")
+        logger.info(f"CRITICAL DEBUG: Project IDs to process: {project_ids}")
+        
+        # Wrap the iterator in a debug wrapper
+        issue_generator = self._process_issues(project_ids)
+        logger.info("CRITICAL DEBUG: Got generator from _process_issues")
+        
+        # Process batches one by one with explicit logging
+        batch_count = 0
+        for doc_batch in issue_generator:
+            batch_count += 1
+            logger.info(f"CRITICAL DEBUG: Processing document batch #{batch_count} with {len(doc_batch)} documents")
+            yield doc_batch
+            logger.info(f"CRITICAL DEBUG: Successfully yielded batch #{batch_count}")
+        
+        logger.info(f"CRITICAL DEBUG: Completed all batches ({batch_count} total)")
 
     def poll_source(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> GenerateDocumentsOutput:
         """
