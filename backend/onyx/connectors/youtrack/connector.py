@@ -587,9 +587,9 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
             )
             
             # Yield the canary document by itself to ensure it gets indexed
-            logger.info("====== YIELDING CANARY DOCUMENT ======")
+            logger.error("====== YIELDING CANARY DOCUMENT v1.2.3 ======")
             yield [canary_doc]
-            logger.info("====== CANARY DOCUMENT YIELDED ======")
+            logger.error("====== CANARY DOCUMENT YIELDED ======")
             
             # Debug - log project IDs being processed
             logger.info(f"ENHANCED DEBUG: Processing {len(project_ids)} projects: {project_ids}")
