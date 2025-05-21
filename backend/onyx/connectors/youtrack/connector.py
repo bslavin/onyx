@@ -266,7 +266,7 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
             )
 
         self.token = str(token)
-        self.base_url = str(url)
+        self.base_url = str(url).rstrip('/')  # Remove trailing slash if present
         self.api_url = f"{self.base_url}/api"
         self.headers = {
             "Content-Type": "application/json",
