@@ -21,13 +21,58 @@ You'll need the following credentials for the Freshdesk KB connector:
 
 ### 2. Finding Available Folders
 
-To list all available folders in your Freshdesk Knowledge Base, use the provided script:
+You have several options to list available folders in your Freshdesk Knowledge Base:
+
+#### Option 1: Backend Script
+
+Use the provided backend script:
 
 ```bash
 python backend/scripts/list_freshdesk_kb_folders.py --domain your-domain.freshdesk.com --api-key your-api-key --pretty
 ```
 
 This will output a list of all folders with their IDs and save the full details to `folders.json`.
+
+#### Option 2: Standalone Scripts
+
+For a more flexible approach, you can use the standalone scripts in the project root:
+
+**List all folders across all categories:**
+```bash
+python standalone_list_freshdesk_folders.py --domain your-domain.freshdesk.com --api-key your-api-key --pretty
+```
+
+**List folders in a specific category (e.g., the "Internal" category):**
+```bash
+python list_category_folders.py
+```
+
+The `list_category_folders.py` script is particularly useful as it shows:
+- Folder ID
+- Folder name
+- Description
+- Article count
+- Creation date
+- URL to access the folder
+
+It also saves a detailed JSON file (`category_5000116325_folders.json`) that you can use for future reference.
+
+#### Common Folders (Category ID: 5000116325)
+
+Here are some useful folders from the "Internal" category that you might want to index:
+
+| Folder ID    | Name               | Article Count |
+|--------------|--------------------|--------------:|
+| 5000201824   | Internal General   | 153           |
+| 5000258916   | Old Archived       | 110           |
+| 5000278970   | WHMCS              | 51            |
+| 5000256156   | Halon              | 49            |
+| 5000184231   | Inbound Solutions  | 40            |
+| 5000255116   | CallTek            | 39            |
+| 5000247987   | Tickets and Tools  | 39            |
+| 5000184232   | Outbound Solutions | 20            |
+
+You can index multiple folders by combining their IDs with commas, such as: `5000184231,5000184232`
 
 ### 3. Configuration
 
