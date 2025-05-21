@@ -585,6 +585,9 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
             yield [canary_doc]
             logger.info("====== CANARY DOCUMENT YIELDED ======")
             
+            # Debug - log project IDs being processed
+            logger.info(f"ENHANCED DEBUG: Processing {len(project_ids)} projects: {project_ids}")
+            
             # Process each project one by one
             for project_id in project_ids:
                 logger.info(f"Processing project ID: {project_id}")
