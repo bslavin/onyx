@@ -1,9 +1,9 @@
 """YouTrack connector implementation for Onyx with multi-project support.
-Version 1.2.3 - Enhanced debugging
+Version 1.2.4 - Enhanced debugging with ERROR-level logs
 """
 
 # Version tracking
-YOUTRACK_CONNECTOR_VERSION = "1.2.3"
+YOUTRACK_CONNECTOR_VERSION = "1.2.4"
 
 import json
 import time
@@ -587,7 +587,7 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
             )
             
             # Yield the canary document by itself to ensure it gets indexed
-            logger.error("====== YIELDING CANARY DOCUMENT v1.2.3 ======")
+            logger.error("====== YIELDING CANARY DOCUMENT v1.2.4 ======")
             yield [canary_doc]
             logger.error("====== CANARY DOCUMENT YIELDED ======")
             
