@@ -156,6 +156,8 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         freshdesk_portal_id: Optional[str] = None,
         batch_size: int = INDEX_BATCH_SIZE,
         connector_specific_config: Optional[dict] = None,
+        freshdesk_folder_ids: Optional[str] = None,  # Add direct parameter for folder_ids
+        folder_id: Optional[str] = None,  # Allow both field names
         **kwargs
     ) -> None:
         """
@@ -175,27 +177,49 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         self.domain = freshdesk_domain
         self.password = "X"  # Freshdesk uses API key as username, 'X' as password
         
+        # DEBUG: Log all constructor arguments to help debug
+        logger.info("INITIALIZING FRESHDESK KB CONNECTOR WITH ALL PARAMS:")
+        logger.info(f"  freshdesk_folder_id: {freshdesk_folder_id}")
+        logger.info(f"  freshdesk_domain: {freshdesk_domain}")
+        logger.info(f"  freshdesk_api_key present: {'Yes' if freshdesk_api_key else 'No'}")
+        logger.info(f"  freshdesk_portal_url: {freshdesk_portal_url}")
+        logger.info(f"  freshdesk_portal_id: {freshdesk_portal_id}")
+        logger.info(f"  freshdesk_folder_ids: {freshdesk_folder_ids}")
+        logger.info(f"  folder_id: {folder_id}")
+        
+        if connector_specific_config:
+            logger.info(f"CONNECTOR CONFIG: {connector_specific_config}")
+        
         # Store connector_specific_config for later use
         self.connector_specific_config = connector_specific_config
         
-        # Get folder_id from constructor parameter or from connector_specific_config
-        self.folder_id = freshdesk_folder_id
+        # Collect potential folder IDs from all possible sources
+        # First, check direct parameters
+        self.folder_id = freshdesk_folder_id or folder_id
+        self.folder_ids = freshdesk_folder_ids
+        
+        # Then check connector_specific_config
         if connector_specific_config:
             logger.info(f"connector_specific_config keys: {list(connector_specific_config.keys())}")
             
-        if not self.folder_id and connector_specific_config and "freshdesk_folder_id" in connector_specific_config:
-            self.folder_id = connector_specific_config.get("freshdesk_folder_id")
-            logger.info(f"Using folder_id from connector_specific_config: {self.folder_id}")
-        
-        # Check for multi-folder configuration
-        if connector_specific_config and "freshdesk_folder_ids" in connector_specific_config:
-            folder_ids_value = connector_specific_config.get("freshdesk_folder_ids")
-            if isinstance(folder_ids_value, list):
-                self.folder_ids = folder_ids_value
-                logger.info(f"Using folder_ids (list) from connector_specific_config: {self.folder_ids}")
-            elif isinstance(folder_ids_value, str):
-                self.folder_ids = folder_ids_value  # Store as string, will be parsed in load_from_state/poll_source
-                logger.info(f"Using folder_ids (string) from connector_specific_config: {self.folder_ids}")
+            # Check for single folder ID
+            if not self.folder_id and "freshdesk_folder_id" in connector_specific_config:
+                self.folder_id = connector_specific_config.get("freshdesk_folder_id")
+                logger.info(f"Using folder_id from connector_specific_config['freshdesk_folder_id']: {self.folder_id}")
+                
+            if not self.folder_id and "folder_id" in connector_specific_config:
+                self.folder_id = connector_specific_config.get("folder_id")
+                logger.info(f"Using folder_id from connector_specific_config['folder_id']: {self.folder_id}")
+                
+            # Check for multi-folder configuration
+            if not self.folder_ids and "freshdesk_folder_ids" in connector_specific_config:
+                folder_ids_value = connector_specific_config.get("freshdesk_folder_ids")
+                if isinstance(folder_ids_value, list):
+                    self.folder_ids = folder_ids_value
+                    logger.info(f"Using folder_ids (list) from connector_specific_config: {self.folder_ids}")
+                elif isinstance(folder_ids_value, str):
+                    self.folder_ids = folder_ids_value  # Store as string, will be parsed in load_from_state/poll_source
+                    logger.info(f"Using folder_ids (string) from connector_specific_config: {self.folder_ids}")
         
         # Debug connector initialization params
         logger.info(f"Initializing Freshdesk KB connector with params:")
