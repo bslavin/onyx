@@ -1,23 +1,20 @@
-# YouTrack Connector Completion Guide
+# # YouTrack Connector Completion Guide
 
-This guide outlines the remaining steps required to complete the YouTrack connector integration in Onyx.
+This guide outlines the current status and remaining steps to complete the YouTrack connector integration in Onyx.
 
-## Overview
+## Current Status
 
-The YouTrack connector allows Onyx to index content from JetBrains YouTrack projects, with support for querying multiple projects simultaneously. While the core connector logic is mostly implemented in `backend/onyx/connectors/youtrack/connector.py`, several integration tasks remain to fully enable the connector within the Onyx system.
+The YouTrack connector is now functional with the following completed:
 
-## Completion Tasks
+- ✅ Core connector implementation (`backend/onyx/connectors/youtrack/connector.py`)
+- ✅ Added to DocumentSource enum in `backend/onyx/configs/constants.py`
+- ✅ Enhanced debugging and error reporting
+- ✅ Improved URL handling (strips trailing slashes)
+- ✅ Multi-project support with various ID formats
+- ✅ Authentication and validation functionality
+- ✅ Troubleshooting documentation
 
-### 1. Add YouTrack to DocumentSource Enum
-
-In `backend/onyx/configs/constants.py`, add YouTrack to the DocumentSource enum:
-
-```python
-class DocumentSource(str, Enum):
-    # ... existing sources ...
-    YOUTRACK = "youtrack"  # Add this line
-    # ... other sources ...
-```
+## Remaining Tasks
 
 ### 2. Add YouTrack to ValidSources Enum in Frontend
 
