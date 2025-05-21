@@ -1,4 +1,9 @@
-"""YouTrack connector implementation for Onyx with multi-project support."""
+"""YouTrack connector implementation for Onyx with multi-project support.
+Version 1.2.3 - Enhanced debugging
+"""
+
+# Version tracking
+YOUTRACK_CONNECTOR_VERSION = "1.2.3"
 
 import json
 import time
