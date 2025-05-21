@@ -197,6 +197,7 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
         self.custom_query = custom_query
         
         # DEBUG: Log all constructor arguments to help debug
+        logger.error(f"INITIALIZING YOUTRACK CONNECTOR v{YOUTRACK_CONNECTOR_VERSION}")
         logger.info("INITIALIZING YOUTRACK CONNECTOR WITH ALL PARAMS:")
         logger.info(f"  youtrack_url: {youtrack_url}")
         logger.info(f"  youtrack_token present: {'Yes' if youtrack_token else 'No'}")
