@@ -42,9 +42,9 @@ For a more flexible approach, you can use the standalone scripts in the project 
 python standalone_list_freshdesk_folders.py --domain your-domain.freshdesk.com --api-key your-api-key --pretty
 ```
 
-**List folders in a specific category (e.g., the "Internal" category):**
+**List folders in a specific category:**
 ```bash
-python list_category_folders.py
+python list_category_folders.py --category-id YOUR_CATEGORY_ID
 ```
 
 The `list_category_folders.py` script is particularly useful as it shows:
