@@ -1637,7 +1637,8 @@ export interface AsanaConfig {
 export interface FreshdeskConfig {}
 
 export interface FreshdeskKBConfig {
-  freshdesk_folder_id: string;
+  freshdesk_folder_ids?: string;
+  folder_id?: string;
   freshdesk_portal_url?: string;
   freshdesk_portal_id?: string;
 }
