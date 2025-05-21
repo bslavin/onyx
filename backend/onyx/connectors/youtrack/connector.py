@@ -647,9 +647,9 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
             )
             
             # Yield the final document by itself
-            logger.info("====== YIELDING FINAL DOCUMENT ======")
+            logger.error("====== YIELDING FINAL DOCUMENT v1.2.3 ======")
             yield [final_doc]
-            logger.info("====== FINAL DOCUMENT YIELDED ======")
+            logger.error("====== FINAL DOCUMENT YIELDED ======")
             
             logger.info(f"======= COMPLETED PROCESSING {issue_count} ISSUES FROM {len(project_ids)} PROJECTS =======")
             
