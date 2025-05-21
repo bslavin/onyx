@@ -594,18 +594,18 @@ class YouTrackConnector(LoadConnector, PollConnector, SlimConnector):
                 project_issue_count = 0
                 
                 # Extra debugging to verify API calls
-                logger.info(f"CRITICAL DEBUG: Making API call to fetch issues for project {project_id}")
+                logger.error(f"CRITICAL DEBUG: Making API call to fetch issues for project {project_id}")
                 
                 # Process issues in batches for this project
                 batch_index = 0
                 for issue_list_from_api in self._fetch_issues_from_project(project_id, start_time):
                     batch_index += 1
                     if not issue_list_from_api:
-                        logger.info(f"Received empty issue batch #{batch_index} from project {project_id} - skipping")
+                        logger.error(f"Received empty issue batch #{batch_index} from project {project_id} - skipping")
                         continue
                     
-                    logger.info(f"CRITICAL DEBUG: Processing batch #{batch_index} with {len(issue_list_from_api)} issues from project {project_id}")
-                    logger.info(f"CRITICAL DEBUG: First issue ID in batch: {issue_list_from_api[0].get('id', 'UNKNOWN')}")
+                    logger.error(f"CRITICAL DEBUG: Processing batch #{batch_index} with {len(issue_list_from_api)} issues from project {project_id}")
+                    logger.error(f"CRITICAL DEBUG: First issue ID in batch: {issue_list_from_api[0].get('id', 'UNKNOWN')}")
                     project_issue_count += len(issue_list_from_api)
                     issue_count += len(issue_list_from_api)
                     
