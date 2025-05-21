@@ -200,10 +200,12 @@ export const YouTrackIcon: React.FC<{ size?: number, className?: string }> = ({
    python test_youtrack_multi_project.py --url https://youtrack.example.com --token your-token --projects PROJECT1,PROJECT2
    ```
    
-   **Note:** 
-   - Use project shortNames (e.g., "MAILHOP") rather than IDs (e.g., "0-5") for better compatibility
-   - Do not use issue IDs (e.g., "NUREPLY-155") as project IDs - these are different!
+   **Critical Configuration Notes:** 
+   - Use project shortNames (e.g., "MAILHOP", "NUREPLY", "AUTOSPF") rather than numeric IDs (e.g., "0-5")
+   - **IMPORTANT**: Never use issue IDs that have the format "PROJECT-123" (e.g., "NUREPLY-155") - these are individual issues, not projects
+   - Enter only the project shortName without any suffix (e.g., "NUREPLY" not "NUREPLY-155")
    - When entering a YouTrack URL, avoid trailing slashes (e.g., use "https://youtrack.example.com" not "https://youtrack.example.com/")
+   - Always run `list_youtrack_projects.py` first to identify the correct project shortNames
 
 3. Configure the connector in the Onyx admin interface:
    - Navigate to the Connectors page

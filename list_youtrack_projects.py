@@ -36,8 +36,8 @@ def list_projects(base_url: str, token: str) -> List[Dict[str, Any]]:
         "Authorization": f"Bearer {token}"
     }
     
-    # API endpoint for projects
-    url = f"{api_url}/admin/projects"
+    # API endpoint for projects - requesting specific fields
+    url = f"{api_url}/admin/projects?fields=id,name,shortName,description,archived,createdBy,created"
     
     try:
         response = requests.get(url, headers=headers)
